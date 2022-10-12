@@ -105,13 +105,6 @@ void loop()
   switch (ss)
   {
     case BEGIN:
-      if (!SD.begin(10))
-      {
-        lcd.clear();
-        lcd.print(F("Nao ha SD"));
-      }
-      else
-      {
         lcd.clear();
         lcd.print(F("Bem vindo"));
         read_config();
@@ -120,7 +113,6 @@ void loop()
         ss = MENU;
         ss_c = SHOW;
         ss_r = START_;
-      }
       break;
     case MENU:
       pos[0] = 17; pos[1] = 23;
@@ -188,7 +180,7 @@ void loop()
           }
           break;
         case WAIT_30:
-          EIFR |= 0x02;
+          EIFR &= ~(1<<INTF1); //clear interrupt flag bit
           attachInterrupt(digitalPinToInterrupt(M_30_100), isr_30m_100m, FALLING);
           while(!interrupt && ss_r == WAIT_30)
           {
@@ -217,16 +209,18 @@ void loop()
           printRun();
           interrupt = false;
           
+          EIMSK &= ~(1 << INT0); //clear interrupts
           ss_r = WAIT_100;
           
           break;
         case WAIT_100:
-          while(millis() - t_curr - t_30 < 1500)
+          attachInterrupt(digitalPinToInterrupt(M_30_100), isr_void, FALLING); //interrupt that does nothing for clearing registers
+          while(millis() - t_curr - t_30 < 2000)
           {
             t_100 = millis() - t_curr;
             printRun();
           }
-          EIFR |= 0x02;
+          EIFR &= ~(1<<INTF1); //clear interrupt flag bit
           attachInterrupt(digitalPinToInterrupt(M_30_100), isr_30m_100m, FALLING);
           
           while(!interrupt && ss_r == WAIT_100)
@@ -290,6 +284,8 @@ void loop()
           ss_r = END_RUN;
           break;
         case END_RUN:
+        attachInterrupt(digitalPinToInterrupt(M_30_100), isr_void, FALLING);
+        attachInterrupt(digitalPinToInterrupt(M_101), isr_void, FALLING);
           if (vel == 0)
           {
             vel = (double) (t_101 - t_100) / 1000.0;
@@ -854,6 +850,12 @@ void isr_101m ()
   t_101 = millis() - t_curr;
   interrupt = true;
   detachInterrupt(digitalPinToInterrupt(M_101));
+}
+
+void isr_void () // isr that just resets interrupt variables
+{
+interrupt = false;
+Serial.println ("Vamo Mangue Baja");
 }
 
 bool read_config()
